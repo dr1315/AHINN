@@ -16,5 +16,5 @@ NB// Step 2 can be skipped without issue if you do not have access to the approp
    2. If there is not already one available, create a directory where you will store AHI scene folders.
    3. Assign the path of the first and second directories by changing the `path.SaveDir` and `path.AHIBaseDir` from `"BLANK"` to ther relevant paths respectively.
    4. Place an AHI folder in the second directory where AHI scenes are to be stored.
-   5. Run the `main.py` file with ERA5 data and defaults activated with `python main.py --use_defaults True --use_era False --path_to_scene <ahi_scene_name>`, where `<ahi_scene_name>` is the name of the AHI scene folder to be analysed.
+   5. Run the `main.py` file without ERA5 data and with defaults activated with `python main.py --use_defaults True --use_era False --path_to_scene <ahi_scene_name>`, where `<ahi_scene_name>` is the name of the AHI scene folder to be analysed.
    6. Check for the .nc file in the directory where outputs are to be saved.

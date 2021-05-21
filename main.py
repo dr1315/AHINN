@@ -30,7 +30,7 @@ def pad_print(to_print, r=True):
         print(padded_string)
 
 
-def full_analysis(full_path_to_scene, save_directory, era_directory, use_era, all=True, analysis=['cloud_id']):
+def full_analysis(full_path_to_scene, save_directory, era_directory, use_era, all_models=True, analysis=['cloud_id']):
     """
     Takes an AHI data folder for a scene and analyses it.
     Will output a .nc file containing:
@@ -39,7 +39,7 @@ def full_analysis(full_path_to_scene, save_directory, era_directory, use_era, al
         - cloud phase (binary)
         - cloud phase (raw, continuous values)
         - cloud top height (value in km)
-    if <all> is True and all the models are available. Otherwise,
+    if <all_models> is True and all the models are available. Otherwise,
     the NNs to be used can be set using the <analysis> parameter.
     The available models can be found under AHINN/Models.
     NB//
@@ -59,7 +59,7 @@ def full_analysis(full_path_to_scene, save_directory, era_directory, use_era, al
 
     :param full_path_to_scene:
     :param save_directory:
-    :param all:
+    :param all_models:
     :param analysis:
     :return:
     """
@@ -75,7 +75,7 @@ def full_analysis(full_path_to_scene, save_directory, era_directory, use_era, al
     model_tail = 'w-era' if use_era else 'wo-era'
     available_models = glob(os.path.join(main_dir, 'Models', f'*_nn_{model_tail}.h5'))
     # Check if <all> is True and correct available models if <all> is False ###
-    if not all:
+    if not all_models:
         available_models = [
             os.path.join(
                 os.path.dirname(available_model),
@@ -254,7 +254,7 @@ def main(path_to_scene, save_dir, era_dir, interactive, use_defaults, use_era):
                 save_directory=save_dir,
                 era_directory=era_dir,
                 use_era=use_era,
-                all=True
+                all_models=True
             )
             pad_print(f'Saving ahi_nn_analysis_{folder_name}.nc in {save_dir}', r=False)
     else:
@@ -264,7 +264,7 @@ def main(path_to_scene, save_dir, era_dir, interactive, use_defaults, use_era):
             save_directory=save_dir,
             era_directory=era_dir,
             use_era=use_era,
-            all=True
+            all_models=True
         )
         print(f'Saving ahi_nn_analysis_{folder_name}.nc in {save_dir}')
     print(f'Took {round((time() - start) / 60., 2)}mins')

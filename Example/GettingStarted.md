@@ -1,5 +1,6 @@
 # Getting Started with Example Data
 A step-by-step process to getting started with the AHINN package.
+
 NB// Step 2 can be skipped without issue if you do not have access to the appropriate ERA5 data.
 
 1. **Running `main.py` on Basic Settings**

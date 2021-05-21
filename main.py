@@ -1,17 +1,17 @@
-'''
+"""
 Will process a scene using all the models in the package
 and save a .nc file containg all the model outputs for
 the scene to a given directory.
-'''
+"""
 
 import sys
 import os
 import click
 from glob import glob
-import numpy as np
-from time import time, localtime
+from time import time
 import json
 import warnings
+
 main_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(main_dir)
 import Processing.preprocessor as prep
@@ -19,6 +19,7 @@ import Processing.postprocessor as postp
 import Processing.kerasNN as KNN
 
 warnings.filterwarnings("ignore")
+
 
 def pad_print(to_print, r=True):
     terminal_width = os.get_terminal_size()[0]
@@ -29,7 +30,7 @@ def pad_print(to_print, r=True):
         print(padded_string)
 
 def full_analysis(full_path_to_scene, save_directory, era_directory, use_era, night_mode=False, all=True, analysis=['cloud_id']):
-    '''
+    """
     Takes an AHI data folder for a scene and analyses it.
     Will output a .nc file containing:
         - cloud identification mask (binary)
@@ -37,7 +38,7 @@ def full_analysis(full_path_to_scene, save_directory, era_directory, use_era, ni
         - cloud phase (binary)
         - cloud phase (raw, continuous values)
         - cloud top height (value in km)
-    if <all> is True and all the models are available. Otherwise,
+    if <all_models> is True and all the models are available. Otherwise,
     the NNs to be used can be set using the <analysis> parameter.
     The available models can be found under AHINN/Models.
     NB//
@@ -57,22 +58,23 @@ def full_analysis(full_path_to_scene, save_directory, era_directory, use_era, ni
 
     :param full_path_to_scene:
     :param save_directory:
-    :param all:
+    :param all_models:
     :param analysis:
     :return:
-    '''
-    ### Load scene and preproces it ###
+    """
+
+    # Load scene and preproces it ###
     scn = prep.read_h8_folder(full_path_to_scene)
     proc_dict = prep.preprocess_scene(
-        scn=scn, 
+        scn=scn,
         era_dir=era_directory,
         include_era=use_era
     )
-    ### Check for available
+    # Check for available
     model_tail = 'w-era' if use_era else 'wo-era'
     available_models = glob(os.path.join(main_dir, 'Models', f'*_nn_{model_tail}.h5'))
-    ### Check if <all> is True and correct available models if <all> is False ###
-    if not all:
+    # Check if <all> is True and correct available models if <all> is False ###
+    if not all_models:
         available_models = [
             os.path.join(
                 os.path.dirname(available_model),
@@ -97,7 +99,7 @@ def full_analysis(full_path_to_scene, save_directory, era_directory, use_era, ni
             for available_model
             in available_models
         ]
-    available_models = list(set(available_models)) # Remove duplicates
+    available_models = list(set(available_models))  # Remove duplicates
     for model in available_models:
         print(model)
     dn_dict = {
@@ -123,7 +125,7 @@ def full_analysis(full_path_to_scene, save_directory, era_directory, use_era, ni
                 )
                 predictions = model.predict(inputs)
                 base_model_dict[Day_or_Night_or_Twilight] = predictions.flatten()
-                ### Clean up RAM ###
+                # Clean up RAM ###
                 del inputs
                 del model
                 del predictions
@@ -140,8 +142,12 @@ def full_analysis(full_path_to_scene, save_directory, era_directory, use_era, ni
         use_era
     )
 
+
 example_ahi_folder = glob(os.path.join(main_dir, 'Example', '**', '*.DAT*'), recursive=True)
-example_ahi_folder = os.path.split(os.path.dirname(example_ahi_folder[0]))[-1] if len(example_ahi_folder) > 0 else '20200105_0500'
+example_ahi_folder = os.path.split(os.path.dirname(example_ahi_folder[0]))[-1] if len(
+    example_ahi_folder) > 0 else '20200105_0500'
+
+
 @click.command()
 @click.option(
     '--path_to_scene', '-p',
@@ -150,34 +156,29 @@ example_ahi_folder = os.path.split(os.path.dirname(example_ahi_folder[0]))[-1] i
          'that contains the scene data to be analysed. The scene folder ' +
          'has the format YYYYmmdd_HHMM.'
 )
-
 @click.option(
     '--save_dir', '-s',
     default=os.path.join(main_dir, 'Example'),
     help='The directory where the analysis data will be saved after processing.'
 )
-
 @click.option(
     '--era_dir', '-e',
     default=os.path.join(main_dir, 'Example', 'ERA5'),
     help='The directory where the ERA5 data for the scene can be found.'
 )
-
 @click.option(
     '--interactive', '-i',
     default='True',
     help='Will ask the user if they want to analysis the scene, giving ' +
          'the directory the scene is held and the scene name.'
 )
-
 @click.option(
     '--use_defaults', '-d',
     default='False',
     help='Will use the defualts from defualts.json for processing. ' +
-         'This will overide the Click default options, even if ' + 
+         'This will overide the Click default options, even if ' +
          'they are inputted by the user.'
 )
-
 @click.option(
     '--use_era', '-u',
     default='True',
@@ -191,11 +192,11 @@ example_ahi_folder = os.path.split(os.path.dirname(example_ahi_folder[0]))[-1] i
 )
 
 def main(path_to_scene, save_dir, era_dir, interactive, use_defaults, use_era, night_mode):
-    '''
+    """
     Will analyse the scene specified by path_to_scene and store the output data in save_dir.
     If interactive is True, will wait for user input before carrying analysis. Can be turned
     off for mass-analysis.
-    '''
+    """
     start = time()
     use_defaults = True if use_defaults.lower() in ['true', '1', 't', 'y', 'yes'] else False
     use_era = True if use_era.lower() in ['true', '1', 't', 'y', 'yes'] else False
@@ -205,52 +206,56 @@ def main(path_to_scene, save_dir, era_dir, interactive, use_defaults, use_era, n
             defaults_dict = json.load(f)
     # Set correct path to the AHI folder for analysis
     corrected_path_to_scene = path_to_scene.split(os.sep)
-    corrected_path_to_scene = corrected_path_to_scene[:-1] if corrected_path_to_scene[-1] == '' else corrected_path_to_scene
+    corrected_path_to_scene = corrected_path_to_scene[:-1] if corrected_path_to_scene[
+                                                                  -1] == '' else corrected_path_to_scene
     corrected_path_to_scene = os.sep.join(corrected_path_to_scene)
     folder_name = corrected_path_to_scene.split(os.sep)[-1]
     if len(corrected_path_to_scene.split(os.sep)) > 1:
         folder_location = os.sep.join(corrected_path_to_scene.split(os.sep)[:-1])
     elif use_defaults:
-        AHIBaseDir = defaults_dict['path.AHIBaseDir'] if defaults_dict['path.AHIBaseDir'] != "BLANK" else None
-        if AHIBaseDir is not None:
-            folder_location = AHIBaseDir
+        ahi_base_dir = defaults_dict['path.ahi_base_dir'] if defaults_dict['path.ahi_base_dir'] != "BLANK" else None
+        if ahi_base_dir is not None:
+            folder_location = ahi_base_dir
         else:
             raise Exception(
-                'path.AHIBaseDir is not set.\n' +\
-                'Please set path to default AHI directory in:\n' +\
+                'path.ahi_base_dir is not set.\n' +
+                'Please set path to default AHI directory in:\n' +
                 '%s' % os.path.join(main, 'defaults.json')
             )
     else:
         raise Exception(
-            'Full path to AHI folder has not been given and defaults have not been used. If stored locally, use ./YYYYmmdd_HHMM as input.'
+            'Full path to AHI folder has not been given and defaults have not been used.'
+            + ' If stored locally, use ./YYYYmmdd_HHMM as input.'
         )
     # Set the correct path to the save directory
     if use_defaults and save_dir == os.path.join(main_dir, 'Example'):
-        SaveDir = defaults_dict['path.SaveDir'] if defaults_dict['path.SaveDir'] != "BLANK" else None
-        if SaveDir is not None:
-            save_dir = SaveDir
+        save_dir = defaults_dict['path.save_dir'] if defaults_dict['path.save_dir'] != "BLANK" else None
+        if save_dir is not None:
+            save_dir = save_dir
         else:
             raise Exception(
-                'path.SaveDir is not set.\n' +\
-                'Please set path to default save directory in:\n' +\
+                'path.save_dir is not set.\n' +
+                'Please set path to default save directory in:\n' +
                 '%s' % os.path.join(main, 'defaults.json')
             )
     # Set path to ERA5 data (37 pressure level and single level)
     if use_defaults and era_dir == os.path.join(main_dir, 'Example', 'ERA5'):
-        ERA5Dir = defaults_dict['path.ERA5BaseDir'] if defaults_dict['path.ERA5BaseDir'] != "BLANK" else None
-        if ERA5Dir is not None:
-            era_dir = ERA5Dir
+        era5_dir = defaults_dict['path.era5_base_dir'] if defaults_dict['path.era5_base_dir'] != "BLANK" else None
+        if era5_dir is not None:
+            era_dir = era5_dir
         else:
             raise Exception(
-                'path.ERA5Dir is not set.\n' +\
-                'Please set path to default ERA5 data directory in:\n' +\
+                'path.era5_dir is not set.\n' +
+                'Please set path to default ERA5 data directory in:\n' +
                 '%s' % os.path.join(main, 'defaults.json')
             )
     # Check if the code is to be run interactively and run the full_analysis code
     era_msg_a = 'using' if use_era else 'without using'
-    era_msg_b = 'w/' if use_era else 'w/o'   
+    era_msg_b = 'w/' if use_era else 'w/o'
     if interactive.lower() in ['true', '1', 't', 'y', 'yes']:
-        if click.confirm(f'Want to carry out analysis for {folder_name} located at {folder_location} {era_msg_a} ERA5 data?', default=True):
+        if click.confirm(
+                f'Want to carry out analysis for {folder_name} located at {folder_location} {era_msg_a} ERA5 data?',
+                default=True):
             pad_print(f'Analysing {folder_name} {era_msg_b} ERA5 data...', r=False)
             full_analysis(  # Carry out full analysis
                 full_path_to_scene=path_to_scene,
@@ -258,9 +263,9 @@ def main(path_to_scene, save_dir, era_dir, interactive, use_defaults, use_era, n
                 era_directory=era_dir,
                 use_era=use_era,
                 night_mode=night_mode
-                all=True
+                all_models=True
             )
-            pad_print(f'Saving ahi_nn_analysis_{folder_name}.nc in {save_dir}', r=False) 
+            pad_print(f'Saving ahi_nn_analysis_{folder_name}.nc in {save_dir}', r=False)
     else:
         print(f'Analysing {folder_name} {era_msg_b} ERA5 data...')
         full_analysis(  # Carry out full analysis
@@ -269,13 +274,12 @@ def main(path_to_scene, save_dir, era_dir, interactive, use_defaults, use_era, n
             era_directory=era_dir,
             use_era=use_era,
             night_mode=night_mode
-            all=True
+            all_models=True
         )
         print(f'Saving ahi_nn_analysis_{folder_name}.nc in {save_dir}')
-    print(f'Took {round((time() - start)/60., 2)}mins')
+    print(f'Took {round((time() - start) / 60., 2)}mins')
     return None
+
 
 if __name__ == '__main__':
     main()
-
-

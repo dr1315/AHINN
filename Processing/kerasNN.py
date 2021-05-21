@@ -1,8 +1,8 @@
-from keras.models import Sequential
+from tensorflow.keras.models import Sequential
 from tensorflow.keras.models import load_model
-from keras.layers import Dense, Dropout
-import keras.optimizers as op
-from keras.initializers import random_normal
+from tensorflow.keras.layers import Dense, Dropout
+import tensorflow.keras.optimizers as op
+from tensorflow.keras.initializers import random_normal
 from sklearn.metrics import roc_curve, confusion_matrix, auc, mean_squared_error, mean_absolute_error
 import matplotlib.pyplot as plt
 import itertools
@@ -67,9 +67,9 @@ class KerasNeuralNetwork(object):
                                 + 'or numpy array of integers')
             if not isinstance(output_neuron_num, int) or not isinstance(input_neuron_num, int):
                 raise Exception('Neuron numbers must be integers')
-            if output_neuron_num <= 0 or input_neuron_num <=0:
+            if output_neuron_num <= 0 or input_neuron_num <= 0:
                 raise Exception('Neuron numbers must be greater than or equal to 1')
-            ### Define class variables ###
+            # Define class variables #
             self.input_num = input_neuron_num
             self.output_num = output_neuron_num
             self.structure = [input_neuron_num] + list(hidden_neuron_nums) + [output_neuron_num]
@@ -89,20 +89,20 @@ class KerasNeuralNetwork(object):
                                         decay=self.decay,
                                         momentum=self.momentum,
                                         nesterov=self.nesterov)
-            ### Define the model ###
+            # Define the model #
             model = Sequential()
-            ### Add input layer ###
+            # Add input layer #
             model.add(Dense(units=self.structure[1],
                             activation=self.hidden_activation,
                             input_shape=(self.structure[0],),
                             kernel_initializer=random_normal(stddev=0.1)))
             model.add(Dropout(self.dropout))
-            ### Add hidden layers ###
-            for l in range(2, len(self.structure)-1):
-                model.add(Dense(units=self.structure[l],
+            # Add hidden layers #
+            for lval in range(2, len(self.structure)-1):
+                model.add(Dense(units=self.structure[lval],
                                 activation=self.hidden_activation))
                 # model.add(Dropout(self.dropout))
-            ### Add output layer ###
+            # Add output layer #
             model.add(Dense(units=self.structure[-1],
                             activation=self.output_activation))
             self.model = model
@@ -144,9 +144,9 @@ class KerasNeuralNetwork(object):
         :param batch_size: int type. The batch size for which to train the data.
         :return: N/A
         """
-        ### Configure the ANN ###
+        # Configure the ANN #
         self.config()
-        ### Train the ANN ###
+        # Train the ANN #
         self.model.fit(train_inputs, train_classes, batch_size=batch_size,
                        epochs=epochs, verbose=1, shuffle=True)
 
@@ -181,15 +181,15 @@ class KerasNeuralNetwork(object):
         else:
             raise Exception(f"label_name '{label_name}' not available for regression plot")
         fpr, tpr, thresholds = roc_curve(labels, predictions)
-        AUROC = auc(fpr, tpr)
-        fig = plt.figure(1, figsize=(10,10))
+        auroc = auc(fpr, tpr)
+        fig = plt.figure(1, figsize=(10, 10))
         plt.plot([0., 1.], [0., 1.], 'b--')
         plt.plot([0., 0., 1., 1.], [0., 1., 1., 0.], 'k+')
         plt.plot(fpr, tpr, 'r-')
-        plt.xlabel(f'False positive rate\nAUROC: {round(AUROC, 3)}')
+        plt.xlabel(f'False positive rate\nauroc: {round(auroc, 3)}')
         plt.ylabel('True negative rate')
         plt.title(f'ROC curve: {label_name}')
-        return fpr, tpr, thresholds, AUROC, fig
+        return fpr, tpr, thresholds, auroc, fig
 
     def confusion_matrix(self, features, labels, label_name='id'):
         if label_name == 'heights':
@@ -199,7 +199,7 @@ class KerasNeuralNetwork(object):
         else:
             raise Exception(f"label_name '{label_name}' not available for regression plot")
         cm = confusion_matrix(labels, features)
-        fig = plt.figure(2, figsize=(10,10))
+        fig = plt.figure(2, figsize=(10, 10))
         plt.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues)
         plt.title(f'Confusion Matrix: {label_name}')
         plt.colorbar()
@@ -235,7 +235,7 @@ class KerasNeuralNetwork(object):
             label_max = 1.
         else:
             raise Exception(f"label_name '{label_name}' not available for regression plot")
-        H, xedges, yedges = np.histogram2d(
+        h, xedges, yedges = np.histogram2d(
             corrected_labels,
             corrected_predictions,
             bins=(
@@ -243,11 +243,11 @@ class KerasNeuralNetwork(object):
                 np.linspace(label_min, label_max, 101),
             )
         )
-        H[H == 0.] = np.nan
-        fig = plt.figure(3, figsize=(10,10))
+        h[h == 0.] = np.nan
+        fig = plt.figure(3, figsize=(10, 10))
         plt.title(f'Regression Plot: {label_name}')
         im = plt.imshow(
-            H.T,
+            h.T,
             cmap='tab20',
             interpolation='nearest',
             origin='lower',
@@ -278,6 +278,3 @@ class KerasNeuralNetwork(object):
         cbar = plt.colorbar(im)
         cbar.set_label('Count', rotation=90)
         return fig
-
-
-

@@ -1,5 +1,5 @@
 {
-    "path.ERA5BaseDir": "BLANK",
-    "path.SaveDir": "BLANK",
-    "path.AHIBaseDir": "BLANK"
+    "path.era5_base_dir": "BLANK",
+    "path.save_dir": "BLANK",
+    "path.ahi_base_dir": "BLANK"
 }

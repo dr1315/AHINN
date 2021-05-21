@@ -80,7 +80,8 @@ def postprocessed_scene_to_nc(scn, postproc_dict, save_directory, use_era):
     '''
     ### Define the filename and open a new .nc file in <save_directory> ###
     start_string = scn.start_time.strftime('%Y%m%d_%H%M')
-    fname = f'ahi_nn_analysis_{start_string}_{'w-era' if use_era else 'wo-era'}.nc'
+    w_era = 'w-era' if use_era else 'wo-era'
+    fname = f'ahi_nn_analysis_{start_string}_{w_era}.nc'
     fullname = os.path.join(save_directory, fname)
     dst = nc.Dataset(fullname, 'w', format='NETCDF4')
     ### Add basic dimensions to file ###

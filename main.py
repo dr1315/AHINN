@@ -200,7 +200,7 @@ def main(path_to_scene, save_dir, era_dir, interactive, use_defaults, use_era, n
     start = time()
     use_defaults = True if use_defaults.lower() in ['true', '1', 't', 'y', 'yes'] else False
     use_era = True if use_era.lower() in ['true', '1', 't', 'y', 'yes'] else False
-    night_mode = True if use_era.lower() in ['true', '1', 't', 'y', 'yes'] else False
+    night_mode = True if night_mode.lower() in ['true', '1', 't', 'y', 'yes'] else False
     if use_defaults:
         with open(os.path.join(main_dir, 'defaults.json'), 'r') as f:
             defaults_dict = json.load(f)

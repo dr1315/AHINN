@@ -1,8 +1,7 @@
-'''
+"""
 Contains the code to plot the outputs of the neural networks and
 RGB images of a scene.
-'''
-
+"""
 
 import sys
 import os
@@ -14,13 +13,14 @@ import cartopy.feature as feature
 import numpy as np
 from datetime import datetime as dt
 import netCDF4 as nc
+
 main_dir = os.sep.join(os.path.dirname(os.path.abspath(__file__)).split(os.sep)[:-1])
 sys.path.append(main_dir)
 from Processing.preprocessor import read_h8_folder, downsample_array
 
 
 def plot_nn_output(dataset, variable_name, dataset_datetime, apply_mask=False):
-    '''
+    """
     Takes a neural network output as a 2d array and plots the
     values in a standard format map over the AHI observable area
     or over Australia.
@@ -30,9 +30,9 @@ def plot_nn_output(dataset, variable_name, dataset_datetime, apply_mask=False):
     :param dataset_datetime:
     :param apply_mask:
     :return:
-    '''
+    """
     cmap = plt.get_cmap('bwr')
-    cmap.set_bad(color = 'k', alpha = 1.)
+    cmap.set_bad(color='k', alpha=1.)
     v_data = np.array(dataset[variable_name])
     v_data[v_data == dataset[variable_name]._FillValue] = np.nan
     if 'cloud' in variable_name and 'mask' not in variable_name:
@@ -66,12 +66,12 @@ def plot_nn_output(dataset, variable_name, dataset_datetime, apply_mask=False):
     )
     ax.set_title(
         ' '.join([
-            a[0].upper()+a[1:] 
-            if len(a) > 2 
-            else a.upper() 
-            if len(a) == 1 
-            else a 
-            for a 
+            a[0].upper() + a[1:]
+            if len(a) > 2
+            else a.upper()
+            if len(a) == 1
+            else a
+            for a
             in variable_name.split('_')
         ]),
         fontweight='bold',
@@ -95,15 +95,16 @@ def plot_nn_output(dataset, variable_name, dataset_datetime, apply_mask=False):
     divider = make_axes_locatable(ax)
     cbaxes = divider.append_axes("right", size="5%", pad=0.05, axes_class=plt.Axes)
     plt.colorbar(
-        im, 
-        cax=cbaxes, 
-        orientation='vertical', 
+        im,
+        cax=cbaxes,
+        orientation='vertical',
         label=r'%s [%s]' % (variable_name, dataset[variable_name].units)
     )
     return fig
 
+
 def plot_full_analysis(path_to_dataset, save_dir, aus_only=False):
-    '''
+    """
     Takes a .nc file of NN outputs from the full analysis of
     an AHI scene and plots them in standard format. Can be
     applied only over Australia.
@@ -112,21 +113,21 @@ def plot_full_analysis(path_to_dataset, save_dir, aus_only=False):
     :param save_dir:
     :param aus_only:
     :return:
-    '''
+    """
     fname_stringtime = os.path.basename(path_to_dataset)[-16:-3]
     dst = nc.Dataset(path_to_dataset)
     plottables = [
         vname
         for vname
         in dst.variables.keys()
-        if vname not in ['longitudes','latitudes']
+        if vname not in ['longitudes', 'latitudes']
     ]
     for plottable in plottables:
         print(plottable)
         fig = plot_nn_output(
-            dataset=dst, 
-            variable_name=plottable, 
-            dataset_datetime=dt.strptime(fname_stringtime, '%Y%m%d_%H%M'), 
+            dataset=dst,
+            variable_name=plottable,
+            dataset_datetime=dt.strptime(fname_stringtime, '%Y%m%d_%H%M'),
             apply_mask=aus_only
         )
         fig_name = '_'.join([plottable, fname_stringtime])
@@ -139,15 +140,16 @@ def plot_full_analysis(path_to_dataset, save_dir, aus_only=False):
         )
     return None
 
+
 def plot_single_channel(ahi_scn, band_number=3, apply_mask=False):
-    '''
+    """
     Plots a single
 
     :param ahi_scn:
     :param band_number:
     :param apply_mask:
     :return:
-    '''
+    """
     band_wavelengths = [
         '0.455',
         '0.510',
@@ -193,8 +195,8 @@ def plot_single_channel(ahi_scn, band_number=3, apply_mask=False):
         transform=ccrs.Geostationary(140.735785863),
         extent=(xmin, xmax, ymin, ymax),
         cmap='bone',
-        vmin=0 if int(band_number) < 7 else 273.15-150,
-        vmax=100 if int(band_number) < 7 else 273.15+150
+        vmin=0 if int(band_number) < 7 else 273.15 - 150,
+        vmax=100 if int(band_number) < 7 else 273.15 + 150
     )
     ax.set_title(
         f'Band {str(int(band_number))}',
@@ -211,7 +213,7 @@ def plot_single_channel(ahi_scn, band_number=3, apply_mask=False):
     ax.text(
         0.5,
         -0.05,
-        'Band Central Wavelength: ' + str(band_wavelengths[int(int(band_number)-1)]) + r'$\mu m$',
+        'Band Central Wavelength: ' + str(band_wavelengths[int(int(band_number) - 1)]) + r'$\mu m$',
         size=12,
         ha='center',
         transform=ax.transAxes
@@ -226,12 +228,13 @@ def plot_single_channel(ahi_scn, band_number=3, apply_mask=False):
     )
     return fig
 
+
 def true_colour_rgb(ahi_scn, apply_mask=False):
     gamma = 2.
     bands = {
-        'r' : downsample_array(np.array(ahi_scn['B03']), 4)[0],
-        'g' : downsample_array(np.array(ahi_scn['B02']), 2)[0],
-        'b' : downsample_array(np.array(ahi_scn['B01']), 2)[0],
+        'r': downsample_array(np.array(ahi_scn['B03']), 4)[0],
+        'g': downsample_array(np.array(ahi_scn['B02']), 2)[0],
+        'b': downsample_array(np.array(ahi_scn['B01']), 2)[0],
     }
     if apply_mask:
         band_values = bands['r']
@@ -246,7 +249,7 @@ def true_colour_rgb(ahi_scn, apply_mask=False):
         band_values[band_values > 100.] = 100.
         band_values[band_values < 0.] = 0.
         band_values = band_values / 100.
-        band_values = band_values ** (1/gamma)
+        band_values = band_values ** (1 / gamma)
         bands[band] = band_values
     rgb_array = np.dstack((
         bands['r'],
@@ -254,13 +257,14 @@ def true_colour_rgb(ahi_scn, apply_mask=False):
         bands['b']
     ))
     return rgb_array
+
 
 def natural_colour_rgb(ahi_scn, apply_mask=False):
     gamma = 2.
     bands = {
-        'r' : np.array(ahi_scn['B05']),
-        'g' : downsample_array(np.array(ahi_scn['B04']), 2)[0],
-        'b' : downsample_array(np.array(ahi_scn['B03']), 4)[0],
+        'r': np.array(ahi_scn['B05']),
+        'g': downsample_array(np.array(ahi_scn['B04']), 2)[0],
+        'b': downsample_array(np.array(ahi_scn['B03']), 4)[0],
     }
     if apply_mask:
         band_values = bands['r']
@@ -275,7 +279,7 @@ def natural_colour_rgb(ahi_scn, apply_mask=False):
         band_values[band_values > 100.] = 100.
         band_values[band_values < 0.] = 0.
         band_values = band_values / 100.
-        band_values = band_values ** (1/gamma)
+        band_values = band_values ** (1 / gamma)
         bands[band] = band_values
     rgb_array = np.dstack((
         bands['r'],
@@ -284,11 +288,12 @@ def natural_colour_rgb(ahi_scn, apply_mask=False):
     ))
     return rgb_array
 
+
 def eumetsat_dust_rgb(ahi_scn, apply_mask=False):
     bands = {
-        'r' : np.array(ahi_scn['B15']),
-        'g' : np.array(ahi_scn['B13']),
-        'b' : np.array(ahi_scn['B11'])
+        'r': np.array(ahi_scn['B15']),
+        'g': np.array(ahi_scn['B13']),
+        'b': np.array(ahi_scn['B11'])
     }
     if apply_mask:
         band_values = bands['r']
@@ -299,23 +304,23 @@ def eumetsat_dust_rgb(ahi_scn, apply_mask=False):
         new_shape = (int(max_y - min_y), int(max_x - min_x))
         for band, band_values in bands.items():
             bands[band] = band_values[mask].reshape(new_shape)
-    ### Make r = limited B15 - B13 ###
+    # Make r = limited B15 - B13 #
     pseudo_r = bands['r'] - bands['g']
     pseudo_r[pseudo_r > 2.] = 2.
     pseudo_r[pseudo_r < -4.] = -4.
     pseudo_r = (pseudo_r + 4.) / 6.
-    ### Make g = limited B13 - B11 ###
+    # Make g = limited B13 - B11 #
     pseudo_g = bands['g'] - bands['b']
     pseudo_g[pseudo_g > 15.] = 15.
     pseudo_g[pseudo_g < 0.] = 0.
     pseudo_g = pseudo_g / 15.
-    pseudo_g = pseudo_g ** (1/2.5)
-    ### Make b = limited B11 ###
+    pseudo_g = pseudo_g ** (1 / 2.5)
+    # Make b = limited B11 ###
     pseudo_b = bands['b']
     pseudo_b[pseudo_b > 289.] = 289.
     pseudo_b[pseudo_b < 261.] = 261.
     pseudo_b = (pseudo_b - 261.) / (289. - 261.)
-    ### Correct rgb arrays in dict ###
+    # Correct rgb arrays in dict #
     bands['r'] = pseudo_r
     bands['g'] = pseudo_g
     bands['b'] = pseudo_b
@@ -328,11 +333,13 @@ def eumetsat_dust_rgb(ahi_scn, apply_mask=False):
 
 
 def plot_rgb(ahi_scn, rgb_name='true_colour', apply_mask=False):
-    available_rgbs = { # 'RGB Name': ['Red', 'Green', 'Blue']
-        'true_colour': ['R: '+r'$0.645 \mu m$', 'G: '+r'$0.510 \mu m$', 'B: '+r'$0.455 \mu m$'],
-        'EUMetSat_dust': ['R: '+r'$12.35 \mu m$'+' - '+r'$10.45 \mu m$', 'G: '+r'$10.45 \mu m$'+' - '+r'$8.60 \mu m$', 'B: '+r'$10.45 \mu m$'],
-        'natural_colour': ['R: '+r'$1.61 \mu m$', 'G: '+r'$0.860 \mu m$', 'B: '+r'$0.645 \mu m$']
+    available_rgbs = {  # 'RGB Name': ['Red', 'Green', 'Blue']
+        'true_colour': ['R: ' + r'$0.645 \mu m$', 'G: ' + r'$0.510 \mu m$', 'B: ' + r'$0.455 \mu m$'],
+        'EUMetSat_dust': ['R: ' + r'$12.35 \mu m$' + ' - ' + r'$10.45 \mu m$',
+                          'G: ' + r'$10.45 \mu m$' + ' - ' + r'$8.60 \mu m$', 'B: ' + r'$10.45 \mu m$'],
+        'natural_colour': ['R: ' + r'$1.61 \mu m$', 'G: ' + r'$0.860 \mu m$', 'B: ' + r'$0.645 \mu m$']
     }
+    rgb_array = None
     if rgb_name not in available_rgbs.keys():
         raise Exception(
             f'Given rgb_name {rgb_name} is not available. \n' +
@@ -416,25 +423,21 @@ def plot_rgb(ahi_scn, rgb_name='true_colour', apply_mask=False):
     help='The full/path/to/nc_file, where the .nc file has the format ' +
          'ahi_nn_annalysis_<YYYYmmdd>_<HHMM>.nc'
 )
-
 @click.option(
     '--save_dir', '-s',
     default=os.path.join(main_dir, 'Example', 'Images'),
     help='The directory where the images will be saved.'
 )
-
 @click.option(
     '--aus_only', '-a',
     default='True',
     help='Boolean indicating whether to produce graphs covering Australia only.'
 )
-
 @click.option(
     '--with_rgbs_and_channels', '-w',
     default='False',
     help='Boolean indicating whether to produce RGB images of the specified region.'
 )
-
 @click.option(
     '--path_to_scene', '-ps',
     default=os.path.join(main_dir, 'Example', '20200105_0500'),
@@ -442,7 +445,6 @@ def plot_rgb(ahi_scn, rgb_name='true_colour', apply_mask=False):
          'that contains the scene data to be analysed. The scene folder ' +
          'has the format YYYYmmdd_HHMM.'
 )
-
 def main(path_to_nc_file, save_dir, aus_only, with_rgbs_and_channels, path_to_scene):
     if aus_only not in ['True', 'true', '1', 'yes', 'Yes']:
         plot_full_analysis(
@@ -477,18 +479,18 @@ def main(path_to_nc_file, save_dir, aus_only, with_rgbs_and_channels, path_to_sc
                 os.path.join(save_dir, fig_name),
                 bbox_inches='tight'
             )
-        for bnum in range(1, 16+1):
+        for bnum in range(1, 16 + 1):
             if aus_only not in ['True', 'true', '1', 'yes', 'Yes']:
                 fig = plot_single_channel(
                     ahi_scn=ahi_scn,
-                    band_number=str(bnum),
+                    band_number=bnum,
                     apply_mask=False
                 )
                 fig_name = '_'.join([f"B{int(bnum):02d}", scene_stringtime]) + '.png'
             else:
                 fig = plot_single_channel(
                     ahi_scn=ahi_scn,
-                    band_number=str(bnum),
+                    band_number=bnum,
                     apply_mask=True
                 )
                 fig_name = '_'.join([f"B{int(bnum):02d}", scene_stringtime, 'australia_only']) + '.png'
@@ -497,8 +499,6 @@ def main(path_to_nc_file, save_dir, aus_only, with_rgbs_and_channels, path_to_sc
                 bbox_inches='tight'
             )
 
+
 if __name__ == '__main__':
     main()
-
-
-

@@ -64,7 +64,7 @@ def postprocess_analysed_data(proc_dict, use_era):
             del model_dict
     return postproc_dict
 
-def postprocessed_scene_to_nc(scn, postproc_dict, save_directory):
+def postprocessed_scene_to_nc(scn, postproc_dict, save_directory, use_era):
     '''
     Will take a satpy Scene and the post-processed data from that
     scene and convert it into a .nc file. The file will be saved
@@ -80,7 +80,7 @@ def postprocessed_scene_to_nc(scn, postproc_dict, save_directory):
     '''
     ### Define the filename and open a new .nc file in <save_directory> ###
     start_string = scn.start_time.strftime('%Y%m%d_%H%M')
-    fname = f'ahi_nn_analysis_{start_string}.nc'
+    fname = f'ahi_nn_analysis_{start_string}_{'w-era' if use_era else 'wo-era'}.nc'
     fullname = os.path.join(save_directory, fname)
     dst = nc.Dataset(fullname, 'w', format='NETCDF4')
     ### Add basic dimensions to file ###

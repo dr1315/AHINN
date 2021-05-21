@@ -134,7 +134,8 @@ def full_analysis(full_path_to_scene, save_directory, era_directory, use_era, al
     postp.postprocessed_scene_to_nc(
         scn,
         proc_dict,
-        save_directory
+        save_directory,
+        use_era
     )
 
 example_ahi_folder = glob(os.path.join(main_dir, 'Example', '**', '*.DAT*'), recursive=True)

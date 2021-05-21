@@ -262,7 +262,7 @@ def main(path_to_scene, save_dir, era_dir, interactive, use_defaults, use_era, n
                 save_directory=save_dir,
                 era_directory=era_dir,
                 use_era=use_era,
-                night_mode=night_mode
+                night_mode=night_mode,
                 all_models=True
             )
             pad_print(f'Saving ahi_nn_analysis_{folder_name}.nc in {save_dir}', r=False)
@@ -273,7 +273,7 @@ def main(path_to_scene, save_dir, era_dir, interactive, use_defaults, use_era, n
             save_directory=save_dir,
             era_directory=era_dir,
             use_era=use_era,
-            night_mode=night_mode
+            night_mode=night_mode,
             all_models=True
         )
         print(f'Saving ahi_nn_analysis_{folder_name}.nc in {save_dir}')

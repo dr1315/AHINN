@@ -29,7 +29,7 @@ def pad_print(to_print, r=True):
     else:
         print(padded_string)
 
-def full_analysis(full_path_to_scene, save_directory, era_directory, use_era, night_mode=False, all=True, analysis=['cloud_id']):
+def full_analysis(full_path_to_scene, save_directory, era_directory, use_era, night_mode=False, all_models=True, analysis=['cloud_id']):
     """
     Takes an AHI data folder for a scene and analyses it.
     Will output a .nc file containing:

@@ -28,7 +28,7 @@ def pad_print(to_print, r=True):
     else:
         print(padded_string)
 
-def full_analysis(full_path_to_scene, save_directory, era_directory, use_era, all=True, analysis=['cloud_id']):
+def full_analysis(full_path_to_scene, save_directory, era_directory, use_era, night_mode=False, all=True, analysis=['cloud_id']):
     '''
     Takes an AHI data folder for a scene and analyses it.
     Will output a .nc file containing:
@@ -112,8 +112,9 @@ def full_analysis(full_path_to_scene, save_directory, era_directory, use_era, al
         for day_or_night_twilight, Day_or_Night_or_Twilight in dn_dict.items():
             inputs = proc_dict[Day_or_Night_or_Twilight]['Inputs']
             if inputs is not None:
+                model_day_or_night_twilight = 'night' if night_mode else day_or_night_twilight
                 specific_model_name = '_'.join(
-                    base_model_name.split('_')[:-1] + [day_or_night_twilight, 'nn', f'{model_tail}.h5']
+                    base_model_name.split('_')[:-1] + [model_day_or_night_twilight, 'nn', f'{model_tail}.h5']
                 )
                 model = KNN.KerasNeuralNetwork(
                     load_nn=True,
@@ -129,7 +130,8 @@ def full_analysis(full_path_to_scene, save_directory, era_directory, use_era, al
         proc_dict[base_model_name] = base_model_dict
     proc_dict = postp.postprocess_analysed_data(
         proc_dict, 
-        use_era
+        use_era,
+        night_mode
     )
     postp.postprocessed_scene_to_nc(
         scn,
@@ -182,8 +184,13 @@ example_ahi_folder = os.path.split(os.path.dirname(example_ahi_folder[0]))[-1] i
     help='Will use models trained to use ERA5 data if True or ' +
          'models that only require AHI files if False.'
 )
+@click.option(
+    '--night_mode', '-n',
+    default='False',
+    help='Will force the analysis to be carried out by the night models only, even during day and twilight.'
+)
 
-def main(path_to_scene, save_dir, era_dir, interactive, use_defaults, use_era):
+def main(path_to_scene, save_dir, era_dir, interactive, use_defaults, use_era, night_mode):
     '''
     Will analyse the scene specified by path_to_scene and store the output data in save_dir.
     If interactive is True, will wait for user input before carrying analysis. Can be turned
@@ -192,6 +199,7 @@ def main(path_to_scene, save_dir, era_dir, interactive, use_defaults, use_era):
     start = time()
     use_defaults = True if use_defaults.lower() in ['true', '1', 't', 'y', 'yes'] else False
     use_era = True if use_era.lower() in ['true', '1', 't', 'y', 'yes'] else False
+    night_mode = True if use_era.lower() in ['true', '1', 't', 'y', 'yes'] else False
     if use_defaults:
         with open(os.path.join(main_dir, 'defaults.json'), 'r') as f:
             defaults_dict = json.load(f)

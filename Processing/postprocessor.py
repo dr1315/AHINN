@@ -12,7 +12,7 @@ import netCDF4 as nc
 main_dir = os.sep.join(os.path.dirname(os.path.abspath(__file__)).split(os.sep)[:-1])
 
 
-def postprocess_analysed_data(proc_dict, use_era):
+def postprocess_analysed_data(proc_dict, use_era, night_mode):
     '''
     Takes a dictionary of processed data and converts
     the raw predictions into continuous and/or binary
@@ -45,9 +45,10 @@ def postprocess_analysed_data(proc_dict, use_era):
                 binary_labels = np.full(proc_dict['NaN Mask'].shape, -9999)
                 flat_binary_labels = binary_labels[~proc_dict['NaN Mask']]
                 for Day_or_Night_Twilight, continuous_labels in proc_dict[key].items(): # Make sure to join algorithm outputs
+                    model_day_or_night_twilight = 'night' if night_mode else Day_or_Night_Twilight.lower() # Check for night mode
                     flat_continuous_labels[proc_dict[Day_or_Night_Twilight]['Mask']] = continuous_labels
                     model_name = '_'.join(  # Make sure to put the day/night back into the model name
-                        key.split('_')[:-1] + [Day_or_Night_Twilight.lower(), 'nn', model_tail]
+                        key.split('_')[:-1] + [model_day_or_night_twilight, 'nn', model_tail]
                     )
                     model_binary_labels = (continuous_labels > opt_thresholds[model_name]).astype('int') # Apply specific threshold
                     flat_binary_labels[proc_dict[Day_or_Night_Twilight]['Mask']] = model_binary_labels

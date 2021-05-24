@@ -77,7 +77,8 @@ def full_analysis(
     proc_dict = prep.preprocess_scene(
         scn=scn,
         era_dir=era_directory,
-        include_era=use_era
+        include_era=use_era,
+        use_driver=use_angle_driver
     )
     # Check for available
     model_tail = 'w-era' if use_era else 'wo-era'

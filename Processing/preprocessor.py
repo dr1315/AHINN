@@ -8,6 +8,8 @@ well as the structure of a scene.
 import os
 import numpy as np
 import pandas as pd
+import dask.array as da
+import h5py
 from glob import glob
 from scipy.interpolate import griddata
 from satpy import Scene, find_files_and_readers
@@ -496,8 +498,8 @@ def downsample_array(array, divide_by):
         for j in range(divide_by):
             arr = array[i::divide_by, j::divide_by].copy()
             arr[np.isnan(arr)] = 0.
-            mean_arr += arr
-            count_arr += ~np.isnan(array[i::divide_by, j::divide_by])
+            mean_arr = mean_arr + arr
+            count_arr = count_arr + ~np.isnan(array[i::divide_by, j::divide_by])
     mean_arr = mean_arr / count_arr
     # Generate the array of standard deviation values ###
     std_arr = np.zeros((int(array.shape[0] / divide_by), int(array.shape[-1] / divide_by)))
@@ -506,7 +508,7 @@ def downsample_array(array, divide_by):
             arr = array[i::divide_by, j::divide_by].copy()
             arr = np.square(arr - mean_arr)
             arr[np.isnan(arr)] = 0.
-            std_arr += arr
+            std_arr = std_arr + arr
     std_arr = std_arr / count_arr  # Variance
     std_arr = np.sqrt(std_arr)
     # Return the mean and standard deviation arrays ###
@@ -569,7 +571,7 @@ def generate_band_arrays(scn):
     band_data = {}
     for band in scn.available_dataset_names():
         print(f'Loading {band}...')
-        band_array = np.array(scn[band])
+        band_array = scn[band].data
         if band in half_km or band in one_km:
             if band in half_km:
                 band_mean, band_std = downsample_array(
@@ -583,13 +585,18 @@ def generate_band_arrays(scn):
                 )
             band_data[f'Himawari Band {str(int(band[1:]))} Mean at 2km Resolution'] = band_mean
             band_data[f'Himawari Band {str(int(band[1:]))} Sigma at 2km Resolution'] = band_std
+            # Clean up RAM
+            del band_mean
+            del band_std
         else:
             band_data[f'Himawari Band {str(int(band[1:]))} Value at 2km Resolution'] = band_array
+        # Clean up RAM
+        del band_array
     print('All bands loaded')
     return band_data
 
 
-def get_scene_angles(scn):
+def get_scene_angles(scn, use_driver=False):
     """
     Creates a dictionary containing the scene coordinates,
     observation and solar angles.
@@ -598,33 +605,60 @@ def get_scene_angles(scn):
     :return:
     """
     angle_dict = {}
-    # Latitudes and Longitudes ###
-    print('Loading longitudes and latitudes...')
-    lons, lats = scn['B16'].area.get_lonlats()  # Get the longitudes and latitudes of the scene pixels
-    lons[lons == np.inf] = np.nan
-    lats[lats == np.inf] = np.nan
+    print('Loading fixed scene angles...')
+    # Set the scene time to be halfway through the scan
+    scn_time = scn.start_time + (scn.end_time - scn.start_time) / 2
+    # Make sure the scene times are the same shape as the lats and lons  
+    scn_time = np.full(scn['B16'].data.shape, scn_time)
+    # Driver file name and location
+    main_dir = os.sep.join(os.path.dirname(os.path.abspath(__file__)).split(os.sep)[:-1])
+    angles_file = os.path.join(
+        main_dir,
+        'Processing',
+        'fixed_angles.h5'
+    )
+    angles_file_exists = os.path.isfile(angles_file)
+    if use_driver and angles_file_exists    :
+        # Load from angles driver file
+        fixed_angles = h5py.File(angles_file)
+        # Load and assign fixed angles
+        lats = fixed_angles['/lats']
+        lons = fixed_angles['/lons']
+        sat_azi = fixed_angles['/sat_azi']
+        sat_elv = fixed_angles['/sat_elv']
+        # Assign as dask arrays
+        lats = da.from_array(lats, chunks=scn['B16'].data.chunksize)
+        lons = da.from_array(lons, chunks=scn['B16'].data.chunksize)
+        sat_azi = da.from_array(sat_azi, chunks=scn['B16'].data.chunksize)
+        sat_elv = da.from_array(sat_elv, chunks=scn['B16'].data.chunksize)
+    else:
+        # Calculate angles
+        lons, lats = scn['B16'].area.get_lonlats() # Get the longitudes and latitudes of the scene pixels
+        lons[lons == np.inf] = np.nan
+        lats[lats == np.inf] = np.nan
+        # Assign as dask arrays
+        lats = da.from_array(lats, chunks=scn['B16'].data.chunksize)
+        lons = da.from_array(lons, chunks=scn['B16'].data.chunksize)
+        sat_azi, sat_elv = get_observer_look(
+            sat_lon=140.7,
+            sat_lat=0.0,
+            sat_alt=35793.,
+            utc_time=scn_time,
+            lon=lons,
+            lat=lats,
+            alt=np.zeros(lats.shape)
+        )
+        sat_azi[sat_azi == np.inf] = np.nan
+        sat_elv[sat_elv == np.inf] = np.nan
+        print(type(sat_azi))
+    # Store fixed angles
     angle_dict['Himawari Latitude'] = lats
     angle_dict['Himawari Longtiude'] = lons
-    # Observation Angles ###
-    print('Loading observation angles...')
-    scn_time = scn.start_time + (
-            scn.end_time - scn.start_time) / 2  # Set the scene time to be halfway through the scan
-    scn_time = np.full(lats.shape, scn_time)  # Make sure the scene times are the same shape as the lats and lons
-    sat_azi, sat_elv = get_observer_look(
-        sat_lon=140.7,
-        sat_lat=0.0,
-        sat_alt=35793.,
-        utc_time=scn_time,
-        lon=lons,
-        lat=lats,
-        alt=np.zeros(lats.shape)
-    )
-    sat_azi[sat_azi == np.inf] = np.nan
-    sat_elv[sat_elv == np.inf] = np.nan
     angle_dict['Himawari Observation Elevation Angle'] = sat_elv
     angle_dict['Himawari Observation Azimuth Angle'] = sat_azi
     # Solar Angles ###
-    print('Loading solar angles...')
+    print('Loading solar angles...') 
+    # Get the solar angles
     solar_elv, solar_azi = get_alt_az(
         utc_time=scn_time,
         lon=lons,
@@ -634,7 +668,7 @@ def get_scene_angles(scn):
     solar_elv = np.rad2deg(solar_elv)
     solar_azi[solar_azi == np.inf] = np.nan
     solar_elv[solar_elv == np.inf] = np.nan
-    angle_dict['Himawari Solar Zenith Angle'] = 90. - solar_elv
+    angle_dict['Himawari Solar Zenith Angle'] = (90. - solar_elv)
     angle_dict['Himawari Solar Azimuth Angle'] = solar_azi
     print('All angles loaded')
     return angle_dict
@@ -694,7 +728,7 @@ def get_era_data(scn, era_dir):
     return era_dict
 
 
-def preprocess_scene(scn, include_era=True, era_dir=None):
+def preprocess_scene(scn, include_era=True, era_dir=None, use_driver=False):
     """
     Takes a satpy Scene and processes into inputs for a
     neural network to analyse, along with the original
@@ -705,7 +739,7 @@ def preprocess_scene(scn, include_era=True, era_dir=None):
     """
     proc_dict = {}
     band_dict = generate_band_arrays(scn)
-    angles_dict = get_scene_angles(scn)
+    angles_dict = get_scene_angles(scn, use_driver)
     if include_era:  # If ERA data is to be included, get the data and use all inputs
         all_data = {  # Expand all input dictionaries into a single dictionary
             **band_dict,
@@ -724,6 +758,7 @@ def preprocess_scene(scn, include_era=True, era_dir=None):
             in normalisation_values.items()
             if 'ERA5 ' not in key
         }
+    szas = all_data['Himawari Solar Zenith Angle'].compute()
     # Clean up RAM ###
     del band_dict
     del angles_dict
@@ -731,15 +766,21 @@ def preprocess_scene(scn, include_era=True, era_dir=None):
     norm_data = [  # Select inputs from normalisation_values dictionary and apply shifts
         (all_data[key] - values[0]) / values[1] for key, values in norm_vals.items()
     ]
+    # Clean up RAM 
+    del all_data
     print('Combining datasets...')
     norm_data = np.dstack(tuple(norm_data))  # Convert into 5500 x 5500 x n_inputs size array
+    norm_data = norm_data.compute() # Force to numpy array for final boolean slicing
+    # print(type(norm_data))
+    print('Datasets Combined')
+    print('Splitting Data by Solar Zenith Angle...')
     norm_data[norm_data == np.inf] = np.nan
     # Check for where nans are and remove and entries containing nans ###
     nan_mask = np.any(np.isnan(norm_data), axis=2)
     norm_data = norm_data[~nan_mask]
     # Apply day mask for separate sza algorithms ###
-    day_mask = all_data['Himawari Solar Zenith Angle'][~nan_mask] < 80.
-    night_mask = all_data['Himawari Solar Zenith Angle'][~nan_mask] >= 90.
+    day_mask = szas[~nan_mask] < 80.
+    night_mask = szas[~nan_mask] >= 90.
     twilight_mask = (~day_mask) & (~night_mask)
     # Add data to dictionary ###
     proc_dict['Day'] = {
@@ -756,7 +797,7 @@ def preprocess_scene(scn, include_era=True, era_dir=None):
     }
     proc_dict['NaN Mask'] = nan_mask
     # Clean up RAM ###
-    del all_data
+    del szas
     del norm_data
     del day_mask
     del night_mask

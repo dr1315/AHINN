@@ -29,7 +29,16 @@ def pad_print(to_print, r=True):
     else:
         print(padded_string)
 
-def full_analysis(full_path_to_scene, save_directory, era_directory, use_era, night_mode=False, all_models=True, analysis=['cloud_id']):
+def full_analysis(
+        full_path_to_scene, 
+        save_directory, 
+        era_directory, 
+        use_era, 
+        night_mode=False, 
+        use_angle_driver=False, 
+        all_models=True, 
+        analysis=['cloud_id']
+    ):
     """
     Takes an AHI data folder for a scene and analyses it.
     Will output a .nc file containing:
@@ -186,21 +195,26 @@ example_ahi_folder = os.path.split(os.path.dirname(example_ahi_folder[0]))[-1] i
          'models that only require AHI files if False.'
 )
 @click.option(
+    '--use_angle_driver', '-a',
+    default='False',
+    help='Will use the fixed angles driver file to load in fixed angles and speed up processing.'
+)
+@click.option(
     '--night_mode', '-n',
     default='False',
     help='Will force the analysis to be carried out by the night models only, even during day and twilight.'
 )
 
-def main(path_to_scene, save_dir, era_dir, interactive, use_defaults, use_era, night_mode):
+def main(path_to_scene, save_dir, era_dir, interactive, use_defaults, use_era, night_mode, use_angle_driver):
     """
     Will analyse the scene specified by path_to_scene and store the output data in save_dir.
     If interactive is True, will wait for user input before carrying analysis. Can be turned
     off for mass-analysis.
     """
-    start = time()
     use_defaults = True if use_defaults.lower() in ['true', '1', 't', 'y', 'yes'] else False
     use_era = True if use_era.lower() in ['true', '1', 't', 'y', 'yes'] else False
     night_mode = True if night_mode.lower() in ['true', '1', 't', 'y', 'yes'] else False
+    use_angle_driver = True if use_angle_driver.lower() in ['true', '1', 't', 'y', 'yes'] else False
     if use_defaults:
         with open(os.path.join(main_dir, 'defaults.json'), 'r') as f:
             defaults_dict = json.load(f)
@@ -256,6 +270,7 @@ def main(path_to_scene, save_dir, era_dir, interactive, use_defaults, use_era, n
         if click.confirm(
                 f'Want to carry out analysis for {folder_name} located at {folder_location} {era_msg_a} ERA5 data?',
                 default=True):
+            start = time()
             pad_print(f'Analysing {folder_name} {era_msg_b} ERA5 data...', r=False)
             full_analysis(  # Carry out full analysis
                 full_path_to_scene=path_to_scene,
@@ -263,10 +278,12 @@ def main(path_to_scene, save_dir, era_dir, interactive, use_defaults, use_era, n
                 era_directory=era_dir,
                 use_era=use_era,
                 night_mode=night_mode,
+                use_angle_driver=use_angle_driver,
                 all_models=True
             )
             pad_print(f'Saving ahi_nn_analysis_{folder_name}.nc in {save_dir}', r=False)
     else:
+        start = time()
         print(f'Analysing {folder_name} {era_msg_b} ERA5 data...')
         full_analysis(  # Carry out full analysis
             full_path_to_scene=path_to_scene,
@@ -274,6 +291,7 @@ def main(path_to_scene, save_dir, era_dir, interactive, use_defaults, use_era, n
             era_directory=era_dir,
             use_era=use_era,
             night_mode=night_mode,
+            use_angle_driver=use_angle_driver,
             all_models=True
         )
         print(f'Saving ahi_nn_analysis_{folder_name}.nc in {save_dir}')

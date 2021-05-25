@@ -283,6 +283,7 @@ def main(path_to_scene, save_dir, era_dir, interactive, use_defaults, use_era, n
                 all_models=True
             )
             pad_print(f'Saving ahi_nn_analysis_{folder_name}.nc in {save_dir}', r=False)
+            print(f'Took {round((time() - start) / 60., 2)}mins')
     else:
         start = time()
         print(f'Analysing {folder_name} {era_msg_b} ERA5 data...')
@@ -296,7 +297,7 @@ def main(path_to_scene, save_dir, era_dir, interactive, use_defaults, use_era, n
             all_models=True
         )
         print(f'Saving ahi_nn_analysis_{folder_name}.nc in {save_dir}')
-    print(f'Took {round((time() - start) / 60., 2)}mins')
+        print(f'Took {round((time() - start) / 60., 2)}mins')
     return None
 
 

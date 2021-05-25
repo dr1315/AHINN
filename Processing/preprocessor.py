@@ -6,8 +6,12 @@ well as the structure of a scene.
 """
 
 import os
+os.environ['PYTROLL_CHUNK_SIZE']='1100'
 import numpy as np
 import pandas as pd
+import dask
+from multiprocessing.pool import ThreadPool
+dask.config.set(pool=ThreadPool(12))
 import dask.array as da
 import h5py
 from glob import glob
@@ -132,13 +136,16 @@ def extract_labels_from_dataframe(dataframe, label='binary_id', qa_filter=True, 
     labels, qa_mask = None, None
 
     acceptable_labels = [
-        'binary_id',
-        'binary_phase',
-        'regression_top_heights'
+        'binary_cloud_id',
+        'binary_aerosol_id',
+        'binary_cloud_phase',
+        'binary_aerosol_type',
+        'regression_cloud_top_heights',
+        'regression_aerosol_top_heights'
     ]
     df = convert_binary_to_useful_columns(dataframe)
     if label in acceptable_labels:
-        if label == 'binary_id':
+        if label == 'binary_cloud_id':
             labels = np.array([profile[0] for profile in list(df['CALIOP Feature Type'].copy())])
             labels = (labels == 2.).astype('int')  # 0 -> Non-cloud, 1 -> Cloud
             qa_mask = np.full(labels.shape, True)
@@ -148,7 +155,17 @@ def extract_labels_from_dataframe(dataframe, label='binary_id', qa_filter=True, 
                     for profile
                     in list(df['CALIOP QA Scores'].copy())
                 ])
-        elif label == 'binary_phase':
+        if label == 'binary_aerosol_id':
+            labels = np.array([profile[0] for profile in list(df['CALIOP Feature Type'].copy())])
+            labels = ((labels == 3.) | (labels == 4.)).astype('int')  # 0 -> Non-aerosol, 1 -> Aerosol
+            qa_mask = np.full(labels.shape, True)
+            if qa_filter:
+                qa_mask = np.array([
+                    np.all((np.array(profile) > qa_limit) | (np.array(profile) == -9999.))
+                    for profile
+                    in list(df['CALIOP QA Scores'].copy())
+                ])
+        elif label == 'binary_cloud_phase':
             cloud_mask = np.array([profile[0] for profile in list(df['CALIOP Feature Type'].copy())]) == 2.
             labels = np.array([profile[0] for profile in list(df['CALIOP Ice/Water Phase'].copy())])
             labels = (labels == 2.).astype('int')  # 0 -> Ice, 1 -> Water
@@ -160,7 +177,45 @@ def extract_labels_from_dataframe(dataframe, label='binary_id', qa_filter=True, 
                     in list(df['CALIOP QA Scores'].copy())
                 ])
             qa_mask = qa_mask & cloud_mask
-        elif label == 'regression_top_heights':
+        elif label == 'binary_aerosol_type':
+            aerosol_mask = np.array([profile[0] for profile in list(df['CALIOP Feature Type'].copy())])
+            sub_aerosol_mask = np.array([profile[0] for profile in list(df['CALIOP Feature Sub-Type'].copy())])
+            # From Mielonen et al. https://doi.org/10.1029/2009GL039609
+            # Non-absorbing: clean marine, clean cont, polluted cont -> 0.
+            # Absorbing: dust, dusty marine, polluted dust, smoke -> 1.
+            labels = np.zeros(aerosol_mask.shape).astype('int') # Non-absorbing -> 0., Absorbing -> 1.
+            # Tropospheric Aerosols
+            tr_aerosol_mask = aerosol_mask == 3.
+            bad_tr_mask = (sub_aerosol_mask == 0.) & tr_aerosol_mask
+            tr_na_mask = ((sub_aerosol_mask == 1.) | (sub_aerosol_mask == 4.)) & tr_aerosol_mask
+            labels[~tr_na_mask] = 1
+            # Stratospheric Aerosols
+            str_aerosol_mask = aerosol_mask == 4.
+            bad_str_mask = ((sub_aerosol_mask == 0.) | (sub_aerosol_mask > 4.)) & str_aerosol_mask
+            str_na_mask = ((sub_aerosol_mask == 1.) | (sub_aerosol_mask == 3.)) & str_aerosol_mask
+            labels[~str_na_mask] = 1
+            qa_mask = np.full(labels.shape, True)
+            if qa_filter:
+                qa_mask = np.array([
+                    np.all((np.array(profile) > qa_limit) | (np.array(profile) == -9999.))
+                    for profile
+                    in list(df['CALIOP QA Scores'].copy())
+                ])
+            qa_mask = qa_mask & aerosol_mask & ~bad_tr_mask & ~bad_str_mask
+        elif label == 'regression_cloud_top_heights':
+            aerosol_mask = np.array([profile[0] for profile in list(df['CALIOP Feature Type'].copy())])
+            aerosol_mask = (aerosol_mask == 3.) | (aerosol_mask == 4.)
+            labels = np.array([profile[0] for profile in list(df['CALIOP Feature Top Altitudes'].copy())])
+            labels = (labels + 0.5) / 30.6  # normalised st 0. -> -0.5km, 1. -> 30.1km due to the 5km product
+            qa_mask = np.full(labels.shape, True)
+            if qa_filter:
+                qa_mask = np.array([
+                    np.all((np.array(profile) > qa_limit) | (np.array(profile) == -9999.))
+                    for profile
+                    in list(df['CALIOP QA Scores'].copy())
+                ])
+            qa_mask = qa_mask & aerosol_mask
+        elif label == 'regression_aerosol_top_heights':
             cloud_mask = np.array([profile[0] for profile in list(df['CALIOP Feature Type'].copy())]) == 2.
             labels = np.array([profile[0] for profile in list(df['CALIOP Feature Top Altitudes'].copy())])
             labels = (labels + 0.5) / 30.6  # normalised st 0. -> -0.5km, 1. -> 30.1km due to the 5km product
@@ -481,38 +536,37 @@ def regrid_era_data(era_data, era_lats, era_lons, him_lats, him_lons):
     return griddata(era_flattened_coords, era_flattened_data, him_coords, method='linear')
 
 
+@jit(nopython=True, parallel=True, cache=True)
 def downsample_array(array, divide_by):
     """
     Decreases the resolution of the input 2D array to the
     resolution specified by divide_by, e.g. divide_by=2 will
-    half the resolution of the array by averaging every 2x2
+    half the resolution  wof the array by averaging every 2x2
     grid of pixels into 1 pixel.
-
     :param array: 2D numpy array of data.
     :param divide_by: int type. The number by which the resolution will be divided by.
     :return: 2D numpy array with 1/(divide_by) the resolution of the input array.
     """
     # Generate the array of mean values ###
-    mean_arr = np.zeros((int(array.shape[0] / divide_by), int(array.shape[-1] / divide_by)))
-    count_arr = np.zeros((int(array.shape[0] / divide_by), int(array.shape[-1] / divide_by)))
-    for i in range(divide_by):
-        for j in range(divide_by):
-            arr = array[i::divide_by, j::divide_by].copy()
-            arr[np.isnan(arr)] = 0.
-            mean_arr = mean_arr + arr
-            count_arr = count_arr + ~np.isnan(array[i::divide_by, j::divide_by])
-    mean_arr = mean_arr / count_arr
-    # Generate the array of standard deviation values ###
-    std_arr = np.zeros((int(array.shape[0] / divide_by), int(array.shape[-1] / divide_by)))
-    for i in range(divide_by):
-        for j in range(divide_by):
-            arr = array[i::divide_by, j::divide_by].copy()
-            arr = np.square(arr - mean_arr)
-            arr[np.isnan(arr)] = 0.
-            std_arr = std_arr + arr
-    std_arr = std_arr / count_arr  # Variance
-    std_arr = np.sqrt(std_arr)
-    # Return the mean and standard deviation arrays ###
+    shape_in = array.shape
+    shape_out = (int(shape_in[0] / divide_by),
+                 int(shape_in[1] / divide_by))
+    start_pos = int(divide_by / 2)
+
+    std_arr = np.zeros(shape_out)
+    mean_arr = np.zeros(shape_out)
+
+    for x_in in prange(0, shape_out[0]):
+        x = start_pos + x_in * divide_by
+        out_x = int((x - start_pos) / divide_by)
+        for y_in in prange(0, shape_out[1]):
+            y = start_pos + y_in * divide_by
+            out_y = int((y - start_pos) / divide_by)
+            cur_arr = array[x - start_pos: x + start_pos,
+                               y - start_pos: y + start_pos]
+            mean_arr[out_x, out_y] = np.nanmean(cur_arr)
+            std_arr[out_x, out_y] = np.nanstd(cur_arr)
+
     return mean_arr, std_arr
 
 
@@ -572,7 +626,7 @@ def generate_band_arrays(scn):
     band_data = {}
     for band in scn.available_dataset_names():
         print(f'Loading {band}...')
-        band_array = scn[band].data
+        band_array = scn[band].data.compute()
         if band in half_km or band in one_km:
             if band in half_km:
                 band_mean, band_std = downsample_array(
@@ -597,7 +651,7 @@ def generate_band_arrays(scn):
     return band_data
 
 
-@jit()
+@jit(parallel=True)
 def get_scene_angles(scn,
                      use_driver=False):
     """

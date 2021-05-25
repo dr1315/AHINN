@@ -14,7 +14,8 @@ from glob import glob
 from scipy.interpolate import griddata
 from satpy import Scene, find_files_and_readers
 from pyorbital.orbital import get_observer_look
-from pyorbital.astronomy import get_alt_az
+from pyorbital.astronomy import sun_zenith_angle
+from numba import jit, prange
 from random import sample
 import time
 
@@ -596,12 +597,15 @@ def generate_band_arrays(scn):
     return band_data
 
 
-def get_scene_angles(scn, use_driver=False):
+@jit()
+def get_scene_angles(scn,
+                     use_driver=False):
     """
     Creates a dictionary containing the scene coordinates,
     observation and solar angles.
 
     :param scn:
+    :param use_driver:
     :return:
     """
     angle_dict = {}
@@ -609,69 +613,73 @@ def get_scene_angles(scn, use_driver=False):
     # Set the scene time to be halfway through the scan
     scn_time = scn.start_time + (scn.end_time - scn.start_time) / 2
     # Make sure the scene times are the same shape as the lats and lons  
-    scn_time = np.full(scn['B16'].data.shape, scn_time)
+    # scn_time = np.full(scn['B16'].data.shape, scn_time)
     # Driver file name and location
-    main_dir = os.sep.join(os.path.dirname(os.path.abspath(__file__)).split(os.sep)[:-1])
+    proc_dir = os.sep.join(os.path.dirname(os.path.abspath(__file__)).split(os.sep)[:-1])
     angles_file = os.path.join(
-        main_dir,
+        proc_dir,
         'Processing',
         'fixed_angles.h5'
     )
     angles_file_exists = os.path.isfile(angles_file)
-    if use_driver and angles_file_exists    :
+    if use_driver and angles_file_exists:
         # Load from angles driver file
         fixed_angles = h5py.File(angles_file)
         # Load and assign fixed angles
         lats = fixed_angles['/lats']
         lons = fixed_angles['/lons']
-        sat_azi = fixed_angles['/sat_azi']
+        # sat_azi = fixed_angles['/sat_azi']
         sat_elv = fixed_angles['/sat_elv']
         # Assign as dask arrays
         lats = da.from_array(lats, chunks=scn['B16'].data.chunksize)
         lons = da.from_array(lons, chunks=scn['B16'].data.chunksize)
-        sat_azi = da.from_array(sat_azi, chunks=scn['B16'].data.chunksize)
+        # sat_azi = da.from_array(sat_azi, chunks=scn['B16'].data.chunksize)
         sat_elv = da.from_array(sat_elv, chunks=scn['B16'].data.chunksize)
     else:
         # Calculate angles
-        lons, lats = scn['B16'].area.get_lonlats() # Get the longitudes and latitudes of the scene pixels
-        lons[lons == np.inf] = np.nan
-        lats[lats == np.inf] = np.nan
-        # Assign as dask arrays
-        lats = da.from_array(lats, chunks=scn['B16'].data.chunksize)
-        lons = da.from_array(lons, chunks=scn['B16'].data.chunksize)
+        # Get the longitudes and latitudes of the scene pixels
+        lons, lats = scn['B16'].attrs['area'].get_lonlats(chunks=scn['B16'].data.chunks)
+        lons = da.where(lons >= 1e30, np.nan, lons)
+        lats = da.where(lats >= 1e30, np.nan, lats)
+
         sat_azi, sat_elv = get_observer_look(
-            sat_lon=140.7,
-            sat_lat=0.0,
-            sat_alt=35793.,
+            sat_lon=scn['B16'].attrs['satellite_longitude'],
+            sat_lat=scn['B16'].attrs['satellite_latitude'],
+            sat_alt=scn['B16'].attrs['satellite_altitude'] / 1000.,
             utc_time=scn_time,
             lon=lons,
             lat=lats,
-            alt=np.zeros(lats.shape)
+            alt=0.
         )
-        sat_azi[sat_azi == np.inf] = np.nan
-        sat_elv[sat_elv == np.inf] = np.nan
-        print(type(sat_azi))
+        # sat_azi = da.where(sat_azi >= 1e30, np.nan, sat_azi)
+        sat_elv = da.where(sat_elv >= 1e30, np.nan, sat_elv)
     # Store fixed angles
     angle_dict['Himawari Latitude'] = lats
     angle_dict['Himawari Longtiude'] = lons
     angle_dict['Himawari Observation Elevation Angle'] = sat_elv
-    angle_dict['Himawari Observation Azimuth Angle'] = sat_azi
-    # Solar Angles ###
-    print('Loading solar angles...') 
+    # angle_dict['Himawari Observation Azimuth Angle'] = sat_azi
+    # Solar Angles #
+    print('Loading solar angles...')
     # Get the solar angles
-    solar_elv, solar_azi = get_alt_az(
-        utc_time=scn_time,
-        lon=lons,
-        lat=lats
-    )
-    solar_azi = np.rad2deg(solar_azi)
-    solar_elv = np.rad2deg(solar_elv)
-    solar_azi[solar_azi == np.inf] = np.nan
-    solar_elv[solar_elv == np.inf] = np.nan
-    angle_dict['Himawari Solar Zenith Angle'] = (90. - solar_elv)
-    angle_dict['Himawari Solar Azimuth Angle'] = solar_azi
+    sunz = sun_zenith_angle(scn_time, lons, lats)
+    sunz = da.where(sunz >= 1e30, np.nan, sunz)
+    sunz = 90. - sunz
+
+    # solar_elv, solar_azi = get_alt_az(
+    #     utc_time=scn_time,
+    #    lon=lons,
+    #     lat=lats
+    # )
+    # solar_azi = np.rad2deg(solar_azi)
+    #  solar_elv = np.rad2deg(solar_elv)
+    #  solar_azi = da.where(solar_azi >= 1e30, np.nan, solar_azi)
+    #  solar_elv = da.where(solar_elv >= 1e30, np.nan, solar_elv)
+
+    angle_dict['Himawari Solar Zenith Angle'] = 90. - sunz
+    #  angle_dict['Himawari Solar Azimuth Angle'] = solar_azi
     print('All angles loaded')
     return angle_dict
+
 
 
 def get_era_data(scn, era_dir):

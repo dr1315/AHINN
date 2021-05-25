@@ -792,15 +792,15 @@ def preprocess_scene(scn, include_era=True, era_dir=None, use_driver=False):
     twilight_mask = (~day_mask) & (~night_mask)
     # Add data to dictionary ###
     proc_dict['Day'] = {
-        'Inputs': norm_data[day_mask] if sum(day_mask) > 0 else None,
+        'Inputs': norm_data[day_mask] if np.sum(day_mask.flatten()) > 0 else None,
         'Mask': day_mask
     }
     proc_dict['Night'] = {
-        'Inputs': norm_data[night_mask] if sum(night_mask) > 0 else None,
+        'Inputs': norm_data[night_mask] if np.sum(night_mask.flatten()) > 0 else None,
         'Mask': night_mask
     }
     proc_dict['Twilight'] = {
-        'Inputs': norm_data[twilight_mask] if sum(twilight_mask) > 0 else None,
+        'Inputs': norm_data[twilight_mask] if np.sum(twilight_mask.flatten()) > 0 else None,
         'Mask': twilight_mask
     }
     proc_dict['NaN Mask'] = nan_mask

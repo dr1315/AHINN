@@ -13,5 +13,4 @@ A package for analysing AHI data using neural networks. These networks can retri
   * ***kerasNN.py*** - Contains all the code related to loading, proccesing and evaluting neural networks.
   * ***plotter.py*** - Contains all the code need to plot the outputs from a .nc file of model outputs, as well as code to generate RBGs and heatmaps of an AHI scene
 * ***Model*** - Directory containing all the models that can be used for analyse. Also conatins a `optimal_thresholds.json` file which holds the optimal thresholds to be applied to binary output models.
-* ***Training*** - TBD
 * ***Example*** - Read through `GettingStarted.md` in this directory for help with ensuring the AHINN package is working correctly.

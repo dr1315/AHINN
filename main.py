@@ -44,9 +44,6 @@ def full_analysis(
     Will output a .nc file containing:
         - cloud identification mask (binary)
         - cloud identification mask (raw, continuous values)
-        - cloud phase (binary)
-        - cloud phase (raw, continuous values)
-        - cloud top height (value in km)
     if <all_models> is True and all the models are available. Otherwise,
     the NNs to be used can be set using the <analysis> parameter.
     The available models can be found under AHINN/Models.
@@ -117,6 +114,86 @@ def full_analysis(
         'night': 'Night',
         'twilight': 'Twilight'
     }
+    day_inputs = np.array([
+        True,
+        False,
+        True,
+        False,
+        True,
+        False,
+        True,
+        False,
+        True,
+        True,
+        True,
+        True,
+        True,
+        True,
+        True,
+        True,
+        True,
+        True,
+        True,
+        True,
+        True, # True,
+        True,
+        False
+    ])
+    twilight_inputs = np.array([
+        True,
+        True,
+        True,
+        True,
+        True,
+        True,
+        True,
+        True,
+        True,
+        True,
+        True,
+        True,
+        True,
+        True,
+        True,
+        True,
+        True,
+        True,
+        True,
+        True,
+        False,
+        False,
+        False
+    ])
+    night_inputs = np.array([
+        False,
+        False,
+        False,
+        False,
+        False,
+        False,
+        False,
+        False,
+        False,
+        False,
+        True,
+        True,
+        True,
+        True,
+        True,
+        True,
+        True,
+        True,
+        True,
+        True,
+        False,
+        True,
+        False
+    ])
+    input_masks = {
+        'day': day_inputs,
+        'twilight': twilight_inputs,
+        'night': night_inputs
+    }
     for model in available_models:
         base_model_name = os.path.basename(model)
         model_dir = os.path.dirname(model)
@@ -125,6 +202,9 @@ def full_analysis(
             inputs = proc_dict[Day_or_Night_or_Twilight]['Inputs']
             if inputs is not None:
                 model_day_or_night_twilight = 'night' if night_mode else day_or_night_twilight
+                input_mask = input_masks[model_day_or_night_twilight]
+                if use_era:
+                    input_mask = np.array(list(input_mask) + [True for _ in range(38)])
                 specific_model_name = '_'.join(
                     base_model_name.split('_')[:-1] + [model_day_or_night_twilight, 'nn', f'{model_tail}.h5']
                 )
@@ -133,7 +213,13 @@ def full_analysis(
                     model_dir=model_dir,
                     model_name=specific_model_name
                 )
-                predictions = model.predict(inputs)
+                try:
+                    predictions = model.predict(inputs[:, input_mask])
+                except:
+                    predictions = np.full(
+                        fill_value=-9999, 
+                        shape=(len(inputs),)
+                    )
                 base_model_dict[Day_or_Night_or_Twilight] = predictions.flatten()
                 # Clean up RAM ###
                 del inputs

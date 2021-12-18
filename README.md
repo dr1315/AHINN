@@ -2,7 +2,7 @@
 A package for analysing AHI data using neural networks. These networks can retrieve a cloud mask, cloud phase and cloud top heights.
 
 ## Package structure:
-* ***main.py*** - Wrapper for processing an AHI scene using all the models available in the Models directory for the given input, e.g. if --use_era True, will use `<nn_name>_w-era.h5` files. Will analyse a given scene (data stored as a folder of L1b .DAT files) and return the model outputs as .nc file in a specified directory. For more information, run `python main.py --help`.
+* ***main.py*** - Wrapper for processing an AHI scene using all the models available in the Models directory for the given input, e.g. if --use_era False, will use `<nn_name>_wo-era.h5` files. Will analyse a given scene (data stored as a folder of L1b .DAT files) and return the model outputs as .nc file in a specified directory. For more information, run `python main.py --help`.
 * ***defaults.json*** - A python dictionary of the deafult paths to key directories. These can be set to make processing easier. If left `BLANK`, the `main.py` code will not use them and will require a full\path\to\data:
   * AHI base directory - The directory where AHI folders of .DAT files can be found.
   * ERA5 base diretory - The directory where ERA5 monthly-average-by-hour data can be found (both 37 pressure level and single level).

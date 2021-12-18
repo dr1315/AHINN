@@ -39,6 +39,8 @@ def postprocess_analysed_data(proc_dict, use_era, night_mode):
             continuous_labels[~proc_dict['NaN Mask']] = flat_continuous_labels
             if 'height' in key:
                 model_dict['Continuous Labels'] = (continuous_labels * 30.6) - 0.5
+            elif 'optical_depth' in key:
+                model_dict['Continuous Labels'] = continuous_labels * 50
             else:
                 model_dict['Continuous Labels'] = continuous_labels
             model_in_thresholds = any([True if '_'.join(key.split('_')[:-2]) in model_name else False for model_name in opt_thresholds.keys()])
@@ -113,6 +115,17 @@ def postprocessed_scene_to_nc(scn, postproc_dict, save_directory, use_era):
                     v_unit = 'None'
                     v_min = 0.
                     v_max = 1.
+            elif 'aerosol_id' in model_name:
+                if 'Binary' in label_type:
+                    variable_name = 'aerosol_binary_mask'
+                    v_unit = 'None'
+                    v_min = 0
+                    v_max = 1
+                elif 'Continuous' in label_type:
+                    variable_name = 'aerosol_continuous_mask'
+                    v_unit = 'None'
+                    v_min = 0.
+                    v_max = 1.
             elif 'cloud_phase' in model_name:
                 if 'Binary' in label_type:
                     variable_name = 'thermodynamic_phase_of_cloud_water_particles_at_cloud_top'
@@ -124,11 +137,37 @@ def postprocessed_scene_to_nc(scn, postproc_dict, save_directory, use_era):
                     v_unit = 'None'
                     v_min = 0.
                     v_max = 1.
+            elif 'aerosol_type' in model_name:
+                if 'Binary' in label_type:
+                    variable_name = 'aerosol_absorbing_type'
+                    v_unit = 'None'
+                    v_min = 0
+                    v_max = 1
+                elif 'Continuous' in label_type:
+                    variable_name = 'predicted_aerosol_absorbing_type'
+                    v_unit = 'None'
+                    v_min = 0.
+                    v_max = 1.
             elif 'cloud_top_height' in model_name:
                 variable_name = 'cloud_top_altitude'
                 v_unit = 'km'
                 v_min = -0.5
                 v_max = 30.1
+            elif 'aerosol_top_height' in model_name:
+                variable_name = 'aerosol_top_altitude'
+                v_unit = 'km'
+                v_min = -0.5
+                v_max = 30.1
+            elif 'cloud_optical_depth' in model_name:
+                variable_name = 'cloud_optical_depth_at_532nm'
+                v_unit = 'None'
+                v_min = 0.
+                v_max = 100.
+            elif 'aerosol_optical_depth' in model_name:
+                variable_name = 'aerosol_optical_depth_at_532nm'
+                v_unit = 'None'
+                v_min = 0.
+                v_max = 100.
             else:
                 raise Exception(
                     'Model has not been added to into post-processing. \n' +

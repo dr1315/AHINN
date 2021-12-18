@@ -132,7 +132,7 @@ class KerasNeuralNetwork(object):
         self.model.save(join(base_dir, model_name) + '.h5')
         print('Model saved')
 
-    def train(self, train_inputs, train_classes, epochs, batch_size):
+    def train(self, train_inputs, train_classes, val_inputs, val_classes, epochs, batch_size):
         """
         Trains the ANN.
 
@@ -147,8 +147,18 @@ class KerasNeuralNetwork(object):
         # Configure the ANN #
         self.config()
         # Train the ANN #
-        self.model.fit(train_inputs, train_classes, batch_size=batch_size,
-                       epochs=epochs, verbose=1, shuffle=True)
+        return self.model.fit(
+            train_inputs, 
+            train_classes,
+            validation_data=(
+                val_inputs,
+                val_classes
+            ),
+            batch_size=batch_size,
+            epochs=epochs, 
+            verbose=1, 
+            shuffle=True
+        )
 
     def evaluate(self, test_inputs, test_classes):
         """
@@ -171,7 +181,7 @@ class KerasNeuralNetwork(object):
                           NB// Values should all be normalised.
         :return: numpy.ndarray of class predictions.
         """
-        return self.model.predict(input_arr, verbose=1)
+        return self.model.predict(input_arr, batch_size=512, verbose=1)
 
     def roc_curve(self, predictions, labels, label_name='id'):
         if label_name == 'heights':

@@ -22,6 +22,7 @@ from pyorbital.astronomy import sun_zenith_angle
 from numba import jit, prange
 from random import sample
 import time
+import re
 
 normalisation_values = {  # Input: [offset, denominator]
     'Himawari Band 1 Mean at 2km Resolution': [50., 50.],
@@ -44,7 +45,7 @@ normalisation_values = {  # Input: [offset, denominator]
     'Himawari Band 14 Value at 2km Resolution': [273.15, 150.],
     'Himawari Band 15 Value at 2km Resolution': [273.15, 150.],
     'Himawari Band 16 Value at 2km Resolution': [273.15, 150.],
-    'Himawari Solar Zenith Angle': [0., 90.],
+    'Himawari Solar Zenith Angle': [0., 1.], # Converts to cos(SolZA)
     'Himawari Observation Elevation Angle': [0., 90.],
     'Himawari Latitude': [0., 90.],
     'ERA5 Atmosphere Temperature Profile': [273.15, 150.],
@@ -113,10 +114,32 @@ def extract_inputs_from_dataframe(dataframe, include_era=True):
             if 'ERA5 ' not in key
         }
     for input_var, values in norm_vals.items():
+        print(f'Adding {input_var}...')
         data = dataframe.copy()[input_var].to_numpy()
         if np.ma.isMA(data[0]):
-            data = np.asarray([i.data[0] for i in data])
-        inputs.append((data - values[0]) / values[1])
+            if input_var == 'ERA5 Atmosphere Temperature Profile':
+                for _ in range(37):
+                    _data = np.asarray([i.data[_] for i in data])
+                    inputs.append((_data - values[0]) / values[1])
+            else:
+                data = np.asarray([i.data[0] for i in data])
+                # try:
+                #     if str(int(input_var)[14:17]) in  [str(_) for _ in range(1,7,1)]:
+                #         data = (data - values[0]) / values[1]
+                #         # Patch SolZA
+                #         solza = np.asarray([i.data[0] for i in dataframe.copy()[input_var].to_numpy()])
+                #         day_solza = solza < 80
+                #         data[day_solza] = data[day_solza] * (np.cos(np.deg2rad(80))/np.cos(np.deg2rad(solza[day_solza])))
+                #         inputs.append(data)
+                #     else:
+                #         inputs.append((data - values[0]) / values[1])
+                # except:
+                inputs.append((data - values[0]) / values[1])
+        else:
+            if input_var == 'Himawari Solar Zenith Angle':
+                print(data)
+                data = np.cos(np.deg2rad(data))
+            inputs.append((data - values[0]) / values[1])
     inputs = np.dstack(tuple(inputs))[0]
     return inputs
 
@@ -137,17 +160,36 @@ def extract_labels_from_dataframe(dataframe, label='binary_id', qa_filter=True, 
 
     acceptable_labels = [
         'binary_cloud_id',
+        'binary_thick_aerosol_id',
         'binary_aerosol_id',
         'binary_cloud_phase',
         'binary_aerosol_type',
         'regression_cloud_top_heights',
-        'regression_aerosol_top_heights'
+        'regression_aerosol_top_heights',
+        'regression_cloud_optical_depths',
+        'regression_aerosol_optical_depths'
     ]
     df = convert_binary_to_useful_columns(dataframe)
+    # print(df.keys())
     if label in acceptable_labels:
         if label == 'binary_cloud_id':
-            labels = np.array([profile[0] for profile in list(df['CALIOP Feature Type'].copy())])
-            labels = (labels == 2.).astype('int')  # 0 -> Non-cloud, 1 -> Cloud
+            labels = np.array([
+                profile[0] == 2. # check_profile(np.array(profile))
+                for profile 
+                in list(df['CALIOP Feature Type'].copy())
+            ]).astype('int')
+            CAD_score = np.array([
+                profile[0] # check_profile(np.array(profile))
+                for profile 
+                in list(df['CALIOP CAD Scores'].copy())
+            ]).astype('int')
+            top_height = np.array([
+                profile[0] 
+                for profile 
+                in list(df['CALIOP Feature Top Altitudes'].copy())
+            ])
+            labels = ((labels) & ((CAD_score > 50) | (top_height > 7.9))).astype('int') # CAD from aerocomm, heights from biomass plume studies
+            # labels = (labels == 2.).astype('int')  # 0 -> Non-cloud, 1 -> Cloud
             qa_mask = np.full(labels.shape, True)
             if qa_filter:
                 qa_mask = np.array([
@@ -155,10 +197,52 @@ def extract_labels_from_dataframe(dataframe, label='binary_id', qa_filter=True, 
                     for profile
                     in list(df['CALIOP QA Scores'].copy())
                 ])
-        if label == 'binary_aerosol_id':
-            labels = np.array([profile[0] for profile in list(df['CALIOP Feature Type'].copy())])
-            labels = ((labels == 3.) | (labels == 4.)).astype('int')  # 0 -> Non-aerosol, 1 -> Aerosol
+        elif label == 'binary_thick_aerosol_id':
+            labels = np.array([
+                profile[0] == 2. # check_profile(np.array(profile))
+                for profile 
+                in list(df['CALIOP Feature Type'].copy())
+            ]).astype('int')
+            CAD_score = np.array([
+                profile[0] # check_profile(np.array(profile))
+                for profile 
+                in list(df['CALIOP CAD Scores'].copy())
+            ]).astype('int')
+            top_alts = np.array([
+                profile[0] # check_profile(np.array(profile))
+                for profile 
+                in list(df['CALIOP Feature Top Altitudes'].copy())
+            ])
+            labels = ((labels) & (CAD_score <= 0) & (CAD_score >= -100) & (top_alts < 7.9)).astype('int')
+            # labels = (labels == 2.).astype('int')  # 0 -> Non-cloud, 1 -> Cloud
             qa_mask = np.full(labels.shape, True)
+            if qa_filter:
+                qa_mask = np.array([
+                    np.all((np.array(profile) > qa_limit) | (np.array(profile) == -9999.))
+                    for profile
+                    in list(df['CALIOP QA Scores'].copy())
+                ])
+        elif label == 'binary_aerosol_id':
+            def check_top_ods(id_profile, od_profile):
+                where_aerosol = (id_profile == 3.) | (id_profile == 4.)
+                top_aerosol = []
+                assumed = True
+                for _ in where_aerosol:
+                    if _  == False:
+                        assumed = False
+                    else:
+                        pass
+                    top_aerosol.append(assumed)
+                return np.sum(np.array(od_profile)[np.array(top_aerosol)])
+            # Only for aerosols with AOD > 0.6 above other layers; value chosen from https://doi.org/10.5194/acp-12-9679-2012
+            aerosol_mask = np.array([
+                check_top_ods > 0.6
+                for profile_id, profile_od
+                in zip(list(df['CALIOP Feature Type'].copy()), list(df['CALIOP ODs for 532nm'].copy()))
+            ])
+            labels = np.zeros(aerosol_mask.shape).astype('int') # Not smoke or dust -> 0., Smoke or dust -> 1.
+            qa_mask = np.full(labels.shape, True)
+            labels[aerosol_mask] = 1
             if qa_filter:
                 qa_mask = np.array([
                     np.all((np.array(profile) > qa_limit) | (np.array(profile) == -9999.))
@@ -201,21 +285,19 @@ def extract_labels_from_dataframe(dataframe, label='binary_id', qa_filter=True, 
                     for profile
                     in list(df['CALIOP QA Scores'].copy())
                 ])
-            qa_mask = qa_mask & aerosol_mask & ~bad_tr_mask & ~bad_str_mask
+            qa_mask = qa_mask & aerosol_mask & ~bad_tr_mask & ~bad_str_mask & np.isnan(labels)
+            ods = []
+            for profile in list(df['CALIOP ODs for 532nm'].copy()):
+                od = 0
+                for _ in profile:
+                    if _ > 0:
+                        od += _
+                ods += [od]
+            # ods = np.array([profile[0] for profile in list(df['CALIOP ODs for 532nm'].copy())])
+            print(ods)
+            ods = np.array(ods)
+            labels[(ods < 0.1)] = 0
         elif label == 'regression_cloud_top_heights':
-            aerosol_mask = np.array([profile[0] for profile in list(df['CALIOP Feature Type'].copy())])
-            aerosol_mask = (aerosol_mask == 3.) | (aerosol_mask == 4.)
-            labels = np.array([profile[0] for profile in list(df['CALIOP Feature Top Altitudes'].copy())])
-            labels = (labels + 0.5) / 30.6  # normalised st 0. -> -0.5km, 1. -> 30.1km due to the 5km product
-            qa_mask = np.full(labels.shape, True)
-            if qa_filter:
-                qa_mask = np.array([
-                    np.all((np.array(profile) > qa_limit) | (np.array(profile) == -9999.))
-                    for profile
-                    in list(df['CALIOP QA Scores'].copy())
-                ])
-            qa_mask = qa_mask & aerosol_mask
-        elif label == 'regression_aerosol_top_heights':
             cloud_mask = np.array([profile[0] for profile in list(df['CALIOP Feature Type'].copy())]) == 2.
             labels = np.array([profile[0] for profile in list(df['CALIOP Feature Top Altitudes'].copy())])
             labels = (labels + 0.5) / 30.6  # normalised st 0. -> -0.5km, 1. -> 30.1km due to the 5km product
@@ -227,6 +309,83 @@ def extract_labels_from_dataframe(dataframe, label='binary_id', qa_filter=True, 
                     in list(df['CALIOP QA Scores'].copy())
                 ])
             qa_mask = qa_mask & cloud_mask
+        elif label == 'regression_aerosol_top_heights':
+            aerosol_mask = np.array([
+                np.all((profile == 3.) | (profile == 4.))
+                for profile
+                in list(df['CALIOP Feature Type'].copy())
+            ])
+            labels = np.array([profile[0] for profile in list(df['CALIOP Feature Top Altitudes'].copy())])
+            labels = (labels + 0.5) / 30.6  # normalised st 0. -> -0.5km, 1. -> 30.1km due to the 5km product
+            qa_mask = np.full(labels.shape, True)
+            if qa_filter:
+                qa_mask = np.array([
+                    np.all((np.array(profile) > qa_limit) | (np.array(profile) == -9999.))
+                    for profile
+                    in list(df['CALIOP QA Scores'].copy())
+                ])
+            qa_mask = qa_mask & aerosol_mask
+            ods = []
+            for profile in list(df['CALIOP ODs for 532nm'].copy()):
+                od = 0
+                for _ in profile:
+                    if _ > 0:
+                        od += _
+                ods += [od]
+            # ods = np.array([profile[0] for profile in list(df['CALIOP ODs for 532nm'].copy())])
+            print(ods)
+            ods = np.array(ods)
+            labels[(ods < 0.1)] = 0
+        elif label == 'regression_cloud_optical_depths':
+            optical_depths = []
+            for od_profile, obs_angle in zip(list(df['CALIOP ODs for 532nm'].copy()), list(df['Himawari Observation Elevation Angle'].copy())):
+                profile_od = np.array([
+                    0 if od < 0 else od/np.cos(np.deg2rad(90 - obs_angle))
+                    for od
+                    in od_profile
+                ])
+                optical_depths.append(np.nansum(profile_od))
+            optical_depths = np.array(optical_depths)
+            optical_depths[optical_depths > 100] = 100
+            labels = optical_depths / 100 # <- Currently a guess for these values as it needs to be >1 for sigmoid to work
+            print(labels)
+            qa_mask = np.array([
+                profile[0] == 2. # check_profile(np.array(profile))
+                for profile 
+                in list(df['CALIOP Feature Type'].copy())
+            ]).astype('int')
+            qa_mask = qa_mask & (optical_depths > 0.1)
+            if qa_filter:
+                qa_mask = np.array([
+                    np.all((np.array(profile) > qa_limit) | (np.array(profile) == -9999.))
+                    for profile
+                    in list(df['CALIOP QA Scores'].copy())
+                ])
+            elif label == 'regression_aerosol_optical_depths':
+                optical_depths = []
+                for od_profile, obs_angle in zip(list(df['CALIOP ODs for 532nm'].copy()), list(df['Himawari Observation Elevation Angle'].copy())):
+                    profile_od = np.array([
+                        0 if od < 0 else od/np.cos(np.deg2rad(90 - obs_angle))
+                        for od
+                        in od_profile
+                    ])
+                    optical_depths.append(np.nansum(profile_od))
+                optical_depths = np.array(optical_depths)
+                optical_depths[optical_depths > 100] = 100
+                labels = optical_depths / 100 # <- Currently a guess for these values as it needs to be >1 for sigmoid to work
+                print(labels)
+                qa_mask = np.array([
+                    profile[0] == 3. or profile[0] == 4. # check_profile(np.array(profile))
+                    for profile 
+                    in list(df['CALIOP Feature Type'].copy())
+                ]).astype('int')
+                qa_mask = qa_mask & (optical_depths > 0.1)
+                if qa_filter:
+                    qa_mask = np.array([
+                        np.all((np.array(profile) > qa_limit) | (np.array(profile) == -9999.))
+                        for profile
+                        in list(df['CALIOP QA Scores'].copy())
+                    ])
         return labels, qa_mask
     else:
         raise Exception(f'Label is not in in available labels.\nAvailable labels are: {acceptable_labels}')
@@ -244,16 +403,20 @@ def extract_inputs_and_labels_from_dataframe(dataframe, label='binary_id', inclu
     :return:
     """
     data_dict = {}
+    print('Exctracting inputs...')
     inputs = extract_inputs_from_dataframe(
         dataframe=dataframe,
         include_era=include_era
     )
+    print('Inputs extracted')
+    print('Extracting labels...')
     labels, qa_mask = extract_labels_from_dataframe(
         dataframe=dataframe,
         label=label,
         qa_filter=qa_filter,
         qa_limit=qa_limit
     )
+    print('Labels extracted')
     day_mask = dataframe['Himawari Solar Zenith Angle'].copy()[qa_mask] < 80.
     data_dict['Day'] = {
         'Inputs': inputs[qa_mask][day_mask],
@@ -272,7 +435,7 @@ def extract_inputs_and_labels_from_dataframe(dataframe, label='binary_id', inclu
     return data_dict
 
 
-def load_collocated_dataframes(target_dir, label='binary_id', include_era=True, qa_filter=True, qa_limit=0.7):
+def load_collocated_dataframes(target_dir, label='binary_cloud_id', include_era=True, qa_filter=True, qa_limit=0.7):
     """
     Load in .h5 collocated files from the target directory and
     return a dictionary of inputs and labels, with label settings
@@ -301,16 +464,17 @@ def load_collocated_dataframes(target_dir, label='binary_id', include_era=True, 
             return data_dict
         except Exception as e:
             print(f'Loading Dataframe {n + 1}/{m} failed                   ', end='\r')
-            time.sleep(0.5)
+            time.sleep(0.1)
             print(e, '                               ', end='\r')
-            time.sleep(0.5)
+            time.sleep(0.1)
             return None
 
     available_dfs = glob(os.path.join(target_dir, '**', '*.h5'), recursive=True)
-    # TO BE REMOVED: Will cap the load in at 1200 dataframes for testing ###
-    max_load = 1200
-    if len(available_dfs) > max_load:
-        available_dfs = sample(available_dfs, max_load)
+    # CAN BE REMOVED: Will cap the load in at 1200 dataframes ###
+    # max_load = 1200
+    # if len(available_dfs) > max_load:
+    #     available_dfs = sample(available_dfs, max_load)
+    # available_dfs = [df for df in available_dfs if os.path.basename(os.path.dirname(os.path.dirname(df))) != '12']
     day_inputs = []
     night_inputs = []
     twilight_inputs = []
@@ -361,8 +525,8 @@ def split_into_training_and_validation(data_dict, training_frac=0.8):
             class_mask = (data_dict['Labels'] == class_number)  # Look at only this class
             class_labels = data_dict['Labels'][class_mask]  # Take only the data for this class
             class_inputs = data_dict['Inputs'][class_mask]
-            even_prob = min_class_length / len(
-                class_labels)  # Assign the probability of values being True in the even masking
+            print(len(class_labels))
+            even_prob = min_class_length / len(class_labels)  # Assign the probability of values being True in the even masking
             if even_prob >= 1:
                 even_prob = 0.9999
             even_mask = np.random.choice(  # Create a mask to take approximately the same number of each class
@@ -717,7 +881,7 @@ def get_scene_angles(scn,
     # Get the solar angles
     sunz = sun_zenith_angle(scn_time, lons, lats)
     sunz = da.where(sunz >= 1e30, np.nan, sunz)
-    sunz = 90. - sunz
+    # sunz = 90. - sunz
 
     # solar_elv, solar_azi = get_alt_az(
     #     utc_time=scn_time,
@@ -729,7 +893,7 @@ def get_scene_angles(scn,
     #  solar_azi = da.where(solar_azi >= 1e30, np.nan, solar_azi)
     #  solar_elv = da.where(solar_elv >= 1e30, np.nan, solar_elv)
 
-    angle_dict['Himawari Solar Zenith Angle'] = 90. - sunz
+    angle_dict['Himawari Solar Zenith Angle'] = sunz
     #  angle_dict['Himawari Solar Azimuth Angle'] = solar_azi
     print('All angles loaded')
     return angle_dict
@@ -821,12 +985,19 @@ def preprocess_scene(scn, include_era=True, era_dir=None, use_driver=False):
             if 'ERA5 ' not in key
         }
     szas = all_data['Himawari Solar Zenith Angle'].compute()
+    print('min solza:', np.nanmin(szas))
+    print('where min solza:', np.where(szas == np.nanmin(szas)))
+    print('max solza:', np.nanmax(szas))
+    print('where max solza:', np.where(szas == np.nanmax(szas)))
     # Clean up RAM ###
     del band_dict
     del angles_dict
     # Normalise data and put it into standard format ###
     norm_data = [  # Select inputs from normalisation_values dictionary and apply shifts
-        (all_data[key] - values[0]) / values[1] for key, values in norm_vals.items()
+        (all_data[key] - values[0]) / values[1] if key != 'Himawari Solar Zenith Angle' 
+        else (np.cos(np.deg2rad(all_data[key])) - values[0]) / values[1] 
+        for key, values 
+        in norm_vals.items()
     ]
     # Clean up RAM 
     del all_data
